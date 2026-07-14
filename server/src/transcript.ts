@@ -1,8 +1,23 @@
 import { readFile } from 'node:fs/promises';
 
+export interface AskOption {
+  label: string;
+  description?: string;
+}
+
+export interface AskQuestion {
+  header?: string;
+  question: string;
+  multiSelect?: boolean;
+  options: AskOption[];
+}
+
 export interface ChatTool {
   name: string;
   detail: string;
+  /** Set only for AskUserQuestion — the structured questions the agent is
+   *  asking the user, rendered as a card instead of a bare tool chip. */
+  questions?: AskQuestion[];
 }
 
 export interface ChatMsg {
@@ -81,6 +96,28 @@ const TASK_ID_RE = /<task-id>(.+?)<\/task-id>/;
 
 function isSubagentDispatch(name: string): boolean {
   return /task|agent/i.test(name);
+}
+
+/** Pull the structured questions out of an AskUserQuestion tool call so the
+ *  UI can render them, instead of showing an empty "AskUserQuestion" chip. */
+function extractQuestions(name: string, input: any): AskQuestion[] | undefined {
+  if (name !== 'AskUserQuestion' || !Array.isArray(input?.questions)) return undefined;
+  const questions: AskQuestion[] = [];
+  for (const q of input.questions) {
+    if (!q || typeof q.question !== 'string') continue;
+    const options: AskOption[] = Array.isArray(q.options)
+      ? q.options
+          .filter((o: any) => o && typeof o.label === 'string')
+          .map((o: any) => ({ label: o.label, description: typeof o.description === 'string' ? o.description : undefined }))
+      : [];
+    questions.push({
+      header: typeof q.header === 'string' ? q.header : undefined,
+      question: q.question,
+      multiSelect: q.multiSelect === true,
+      options,
+    });
+  }
+  return questions.length ? questions : undefined;
 }
 
 function toolDetail(name: string, input: any): string {
@@ -171,10 +208,10 @@ export async function parseTranscript(file: string, sessionId: string, limit = 8
       const content = o.message?.content;
       const { text, images } = textAndImages(content);
       const toolUses: any[] = Array.isArray(content) ? content.filter((c: any) => c?.type === 'tool_use') : [];
-      const tools: ChatTool[] = toolUses.map((c) => ({
-        name: String(c.name ?? ''),
-        detail: toolDetail(String(c.name ?? ''), c.input ?? {}),
-      }));
+      const tools: ChatTool[] = toolUses.map((c) => {
+        const name = String(c.name ?? '');
+        return { name, detail: toolDetail(name, c.input ?? {}), questions: extractQuestions(name, c.input ?? {}) };
+      });
       for (const c of toolUses) {
         if (!c.id || !isSubagentDispatch(String(c.name ?? ''))) continue;
         const description =

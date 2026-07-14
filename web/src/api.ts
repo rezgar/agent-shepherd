@@ -163,6 +163,12 @@ export function useShepherd(): Shepherd {
       };
       ws.onclose = () => {
         setConnected(false);
+        // The daemon tracks in-flight sends only in memory, so once the socket
+        // drops (daemon restart/crash) it can never deliver the completion that
+        // clears these — leaving the composer stuck on "Sending…" forever.
+        // Release them: after a disconnect the send is unrecoverable anyway.
+        setSendingIds((s) => (s.size ? new Set() : s));
+        setPending((p) => (Object.keys(p).length ? {} : p));
         if (!stopped) retry = setTimeout(connect, 1500);
       };
       ws.onerror = () => ws.close();
@@ -237,6 +243,20 @@ export function useShepherd(): Shepherd {
 
   const cancel = useCallback((sessionId: string) => {
     wsRef.current?.send(JSON.stringify({ type: 'cancel', sessionId }));
+    // Release the composer immediately rather than waiting for send-cancelled —
+    // if the daemon already lost the handle (e.g. it restarted), that reply
+    // would never come and the input would stay stuck.
+    setSendingIds((s) => {
+      if (!s.has(sessionId)) return s;
+      const n = new Set(s);
+      n.delete(sessionId);
+      return n;
+    });
+    setPending((p) => {
+      if (!(sessionId in p)) return p;
+      const { [sessionId]: _drop, ...rest } = p;
+      return rest;
+    });
   }, []);
 
   // Only ever surface the transcript that matches the focused session — a previous

@@ -110,6 +110,59 @@ describe('parseTranscript: active subagents', () => {
     expect(activeSubagents).toEqual([]);
   });
 
+  it('extracts AskUserQuestion into structured questions instead of a bare chip', async () => {
+    const f = write('ask.jsonl', [
+      {
+        type: 'assistant',
+        timestamp: '2026-07-14T12:00:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_ask',
+              name: 'AskUserQuestion',
+              input: {
+                questions: [
+                  {
+                    header: 'Status signal',
+                    question: 'Which signal should drive the high-level status?',
+                    multiSelect: false,
+                    options: [
+                      { label: 'The task you gave it', description: 'Show the current instruction.' },
+                      { label: 'The last thing it said', description: 'Show the latest narration.' },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ]);
+    const { messages } = await parseTranscript(f, 'parent-ask');
+    const tool = messages.at(-1)!.tools[0];
+    expect(tool.name).toBe('AskUserQuestion');
+    expect(tool.questions).toHaveLength(1);
+    expect(tool.questions![0].question).toBe('Which signal should drive the high-level status?');
+    expect(tool.questions![0].options.map((o) => o.label)).toEqual(['The task you gave it', 'The last thing it said']);
+  });
+
+  it('leaves questions undefined for a normal (non-AskUserQuestion) tool', async () => {
+    const f = write('normal-tool.jsonl', [
+      {
+        type: 'assistant',
+        timestamp: '2026-07-14T12:00:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_bash', name: 'Bash', input: { command: 'ls', description: 'list files' } }],
+        },
+      },
+    ]);
+    const { messages } = await parseTranscript(f, 'parent-normal');
+    expect(messages.at(-1)!.tools[0].questions).toBeUndefined();
+  });
+
   it('never renders the task-notification body as a chat message', async () => {
     const f = write('notif-render.jsonl', [
       dispatch('toolu_6', 'Audit scan pipeline', '2026-07-14T12:00:00.000Z'),

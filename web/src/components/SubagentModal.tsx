@@ -26,7 +26,8 @@ export function SubagentModal({
           </button>
         </div>
         <div className="modal__body">
-          <ChatTranscript messages={messages} hasMore={false} onLoadMore={() => {}} />
+          {/* Read-only: you answer the parent session, never a subagent directly. */}
+          <ChatTranscript messages={messages} hasMore={false} onLoadMore={() => {}} onAnswer={() => {}} answerable={false} />
         </div>
       </div>
     </div>

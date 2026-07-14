@@ -36,9 +36,23 @@ export interface Snapshot {
   agents: AgentModel[];
 }
 
+export interface AskOption {
+  label: string;
+  description?: string;
+}
+
+export interface AskQuestion {
+  header?: string;
+  question: string;
+  multiSelect?: boolean;
+  options: AskOption[];
+}
+
 export interface ChatTool {
   name: string;
   detail: string;
+  /** Set only for AskUserQuestion — rendered as a question card, not a chip. */
+  questions?: AskQuestion[];
 }
 
 export interface ChatMsg {
