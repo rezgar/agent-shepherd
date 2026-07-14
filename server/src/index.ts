@@ -65,11 +65,40 @@ async function main() {
     for (const c of wss.clients) if (c.readyState === 1) c.send(data);
   };
 
-  const sendTranscript = async (ws: FocusWs) => {
+  const LIMIT = 30;
+  // Send a recent window of the focused transcript (fast first paint), or an
+  // older page when `before` is given (infinite scroll upward).
+  const sendWindow = async (ws: FocusWs, before?: number) => {
     if (!ws.focusFile || !ws.focusSession) return;
     try {
-      const t = await parseTranscript(ws.focusFile, ws.focusSession);
-      if (ws.readyState === 1) ws.send(JSON.stringify(t));
+      const all = (await parseTranscript(ws.focusFile, ws.focusSession)).messages;
+      const total = all.length;
+      if (typeof before === 'number') {
+        const end = Math.max(0, before);
+        const start = Math.max(0, end - LIMIT);
+        if (ws.readyState === 1)
+          ws.send(
+            JSON.stringify({
+              type: 'transcriptMore',
+              sessionId: ws.focusSession,
+              messages: all.slice(start, end),
+              offset: start,
+            }),
+          );
+      } else {
+        const start = Math.max(0, total - LIMIT);
+        if (ws.readyState === 1)
+          ws.send(
+            JSON.stringify({
+              type: 'transcript',
+              sessionId: ws.focusSession,
+              file: ws.focusFile,
+              messages: all.slice(start),
+              offset: start,
+              total,
+            }),
+          );
+      }
     } catch (e) {
       console.error('[transcript error]', ws.focusFile, e);
     }
@@ -87,7 +116,9 @@ async function main() {
       if (m.type === 'focus' && m.file && m.sessionId) {
         ws.focusFile = m.file;
         ws.focusSession = m.sessionId;
-        void sendTranscript(ws);
+        void sendWindow(ws);
+      } else if (m.type === 'loadMore' && typeof m.before === 'number') {
+        void sendWindow(ws, m.before);
       } else if (m.type === 'unfocus') {
         ws.focusFile = undefined;
         ws.focusSession = undefined;
@@ -116,7 +147,7 @@ async function main() {
       if (!c.focusFile || norm(c.focusFile) !== np) continue;
       const prev = tTimers.get(c);
       if (prev) clearTimeout(prev);
-      tTimers.set(c, setTimeout(() => void sendTranscript(c), 400));
+      tTimers.set(c, setTimeout(() => void sendWindow(c), 400));
     }
   };
 

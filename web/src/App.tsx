@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useShepherd, useTick } from './api';
 import { ProjectLane } from './components/ProjectLane';
 import { FocusView } from './components/FocusView';
@@ -7,6 +7,15 @@ import type { AgentModel } from './types';
 const PALETTE = ['#58a6ff', '#bc8cff', '#39c5cf', '#e3b341', '#f0883e', '#56d364', '#ff7b72', '#79c0ff'];
 const WINDOWS = [1, 4, 12, 24];
 
+function load<T>(key: string, fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    return v ? (JSON.parse(v) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function groupByProduct(agents: AgentModel[]): [string, AgentModel[]][] {
   const map = new Map<string, AgentModel[]>();
   for (const a of agents) {
@@ -14,21 +23,28 @@ function groupByProduct(agents: AgentModel[]): [string, AgentModel[]][] {
     arr.push(a);
     map.set(a.product, arr);
   }
+  // Products with someone waiting on you float first, then stable by earliest creation.
   return [...map.entries()].sort((a, b) => {
     const an = a[1].some((x) => x.state === 'needs-you') ? 0 : 1;
     const bn = b[1].some((x) => x.state === 'needs-you') ? 0 : 1;
     if (an !== bn) return an - bn;
-    const at = Math.max(...a[1].map((x) => x.lastActivity));
-    const bt = Math.max(...b[1].map((x) => x.lastActivity));
-    return bt - at;
+    return Math.min(...a[1].map((x) => x.createdAt)) - Math.min(...b[1].map((x) => x.createdAt));
   });
 }
 
 export function App() {
-  const { snap, transcript, connected, focus, unfocus } = useShepherd();
+  const { snap, connected, focusedId, messages, hasMore, focus, unfocus, loadMore } = useShepherd();
   const now = useTick(1000);
   const [windowH, setWindowH] = useState(4);
-  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [fontSize, setFontSize] = useState<number>(() => load('shepherd:font', 14));
+  const [renames, setRenames] = useState<Record<string, string>>(() => load('shepherd:names', {}));
+
+  useEffect(() => {
+    localStorage.setItem('shepherd:font', JSON.stringify(fontSize));
+  }, [fontSize]);
+  useEffect(() => {
+    localStorage.setItem('shepherd:names', JSON.stringify(renames));
+  }, [renames]);
 
   const colorMap = useMemo(() => {
     const names = snap ? [...new Set(snap.agents.map((a) => a.product))].sort() : [];
@@ -37,6 +53,15 @@ export function App() {
     return m;
   }, [snap]);
   const colorOf = (product: string) => colorMap.get(product) ?? '#58a6ff';
+  const nameOf = (a: AgentModel) => renames[a.sessionId] || a.name;
+  const rename = (sessionId: string, name: string) =>
+    setRenames((r) => {
+      const next = { ...r };
+      if (name) next[sessionId] = name;
+      else delete next[sessionId];
+      return next;
+    });
+  const changeFont = (delta: number) => setFontSize((f) => Math.max(12, Math.min(22, f + delta)));
 
   if (!snap) {
     return (
@@ -50,15 +75,6 @@ export function App() {
   const cutoff = latest - windowH * 3_600_000;
   const visible = snap.agents.filter((a) => a.lastActivity >= cutoff);
 
-  const openAgent = (a: AgentModel) => {
-    setFocusedId(a.sessionId);
-    focus(a.file, a.sessionId);
-  };
-  const closeFocus = () => {
-    setFocusedId(null);
-    unfocus();
-  };
-
   const focused = focusedId ? (snap.agents.find((a) => a.sessionId === focusedId) ?? null) : null;
 
   if (focused) {
@@ -66,11 +82,17 @@ export function App() {
       <FocusView
         agents={visible}
         focused={focused}
-        transcript={transcript && transcript.sessionId === focused.sessionId ? transcript : null}
+        messages={messages}
+        hasMore={hasMore}
+        onLoadMore={loadMore}
         now={now}
         colorOf={colorOf}
-        onSelect={openAgent}
-        onExit={closeFocus}
+        nameOf={nameOf}
+        onSelect={(a) => focus(a.file, a.sessionId)}
+        onExit={unfocus}
+        onRename={rename}
+        fontSize={fontSize}
+        onFontSize={changeFont}
       />
     );
   }
@@ -113,7 +135,8 @@ export function App() {
             agents={agents}
             now={now}
             color={colorOf(product)}
-            onSelect={openAgent}
+            onSelect={(a) => focus(a.file, a.sessionId)}
+            nameOf={nameOf}
           />
         ))}
       </main>

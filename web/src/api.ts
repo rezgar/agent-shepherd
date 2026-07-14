@@ -1,24 +1,52 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Snapshot, Transcript } from './types';
+import type { ChatMsg, Snapshot } from './types';
 
 const WS_URL = 'ws://localhost:4177';
 
-export interface Shepherd {
-  snap: Snapshot | null;
-  transcript: Transcript | null;
-  connected: boolean;
-  focus: (file: string, sessionId: string) => void;
-  unfocus: () => void;
+interface Loaded {
+  messages: ChatMsg[];
+  offset: number; // index of the first loaded message in the full transcript
+  total: number;
 }
 
-/** One WebSocket to the daemon: streams the snapshot, and (when focused) the
- *  focused session's transcript, both auto-reconnecting. */
+export interface Shepherd {
+  snap: Snapshot | null;
+  connected: boolean;
+  focusedId: string | null;
+  /** null while nothing focused; [] once focused but before first window arrives. */
+  messages: ChatMsg[] | null;
+  hasMore: boolean;
+  focus: (file: string, sessionId: string) => void;
+  unfocus: () => void;
+  loadMore: () => void;
+}
+
+function mergeTail(prev: Loaded | null, tail: ChatMsg[], offset: number, total: number): Loaded {
+  if (!prev || !prev.messages.length) return { messages: tail, offset, total };
+  // A tail window overlaps what we have — append only genuinely new messages.
+  const have = new Set(prev.messages.map((m) => m.id));
+  const added = tail.filter((m) => !have.has(m.id));
+  return { messages: added.length ? [...prev.messages, ...added] : prev.messages, offset: prev.offset, total };
+}
+
+function prependOlder(prev: Loaded, older: ChatMsg[], offset: number): Loaded {
+  const have = new Set(prev.messages.map((m) => m.id));
+  const fresh = older.filter((m) => !have.has(m.id));
+  return { messages: [...fresh, ...prev.messages], offset, total: prev.total };
+}
+
 export function useShepherd(): Shepherd {
   const [snap, setSnap] = useState<Snapshot | null>(null);
-  const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [connected, setConnected] = useState(false);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
+
   const wsRef = useRef<WebSocket | null>(null);
   const focusRef = useRef<{ file: string; sessionId: string } | null>(null);
+  const loadedRef = useRef<Loaded | null>(null);
+  loadedRef.current = loaded;
+  // Cache the loaded window per session so re-focusing is instant.
+  const cache = useRef<Map<string, Loaded>>(new Map());
 
   useEffect(() => {
     let stopped = false;
@@ -32,12 +60,29 @@ export function useShepherd(): Shepherd {
         if (focusRef.current) ws.send(JSON.stringify({ type: 'focus', ...focusRef.current }));
       };
       ws.onmessage = (e) => {
+        let d: any;
         try {
-          const data = JSON.parse(e.data as string);
-          if (data?.type === 'snapshot') setSnap(data as Snapshot);
-          else if (data?.type === 'transcript') setTranscript(data as Transcript);
+          d = JSON.parse(e.data as string);
         } catch {
-          /* ignore malformed frame */
+          return;
+        }
+        if (d.type === 'snapshot') {
+          setSnap(d as Snapshot);
+        } else if (d.type === 'transcript') {
+          if (d.sessionId !== focusRef.current?.sessionId) return;
+          setLoaded((prev) => {
+            const next = mergeTail(prev, d.messages, d.offset, d.total);
+            cache.current.set(d.sessionId, next);
+            return next;
+          });
+        } else if (d.type === 'transcriptMore') {
+          if (d.sessionId !== focusRef.current?.sessionId) return;
+          setLoaded((prev) => {
+            if (!prev) return prev;
+            const next = prependOlder(prev, d.messages, d.offset);
+            cache.current.set(d.sessionId, next);
+            return next;
+          });
         }
       };
       ws.onclose = () => {
@@ -57,17 +102,35 @@ export function useShepherd(): Shepherd {
 
   const focus = useCallback((file: string, sessionId: string) => {
     focusRef.current = { file, sessionId };
-    setTranscript(null);
+    setFocusedId(sessionId);
+    setLoaded(cache.current.get(sessionId) ?? null); // instant paint from cache
     wsRef.current?.send(JSON.stringify({ type: 'focus', file, sessionId }));
   }, []);
 
   const unfocus = useCallback(() => {
     focusRef.current = null;
-    setTranscript(null);
+    setFocusedId(null);
+    setLoaded(null);
     wsRef.current?.send(JSON.stringify({ type: 'unfocus' }));
   }, []);
 
-  return { snap, transcript, connected, focus, unfocus };
+  const loadMore = useCallback(() => {
+    const f = focusRef.current;
+    const st = loadedRef.current;
+    if (!f || !st || st.offset <= 0) return;
+    wsRef.current?.send(JSON.stringify({ type: 'loadMore', file: f.file, sessionId: f.sessionId, before: st.offset }));
+  }, []);
+
+  return {
+    snap,
+    connected,
+    focusedId,
+    messages: loaded ? loaded.messages : focusedId ? [] : null,
+    hasMore: loaded ? loaded.offset > 0 : false,
+    focus,
+    unfocus,
+    loadMore,
+  };
 }
 
 /** Re-render on an interval so relative timestamps stay fresh. */

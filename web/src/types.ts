@@ -25,6 +25,7 @@ export interface AgentModel {
   status: string;
   action: ActionKind | null;
   lastActivity: number;
+  createdAt: number;
   queued: number;
   file: string;
 }

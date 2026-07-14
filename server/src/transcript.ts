@@ -99,5 +99,6 @@ export async function parseTranscript(file: string, sessionId: string, limit = 8
     }
   }
 
-  return { type: 'transcript', sessionId, file, messages: msgs.slice(-limit) };
+  // Return the full parsed list; the WebSocket layer decides the window to send.
+  return { type: 'transcript', sessionId, file, messages: msgs };
 }
