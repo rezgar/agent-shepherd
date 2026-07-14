@@ -40,6 +40,34 @@ function textAndImages(content: unknown): { text: string; images: string[] } {
   return { text: texts.join('\n\n'), images };
 }
 
+// Matches the file-path notes sender.ts prepends for pasted images (there's no
+// image-attachment flag for `claude -p`, so the real transcript only ever has
+// a text pointer to the temp file — resolve it back to an actual image here).
+const PASTE_NOTE_RE = /^\[Pasted image \d+ — read this file to view it: (.+?)\]\n?/gm;
+
+const MIME_BY_EXT: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+
+async function resolvePastedImages(text: string): Promise<{ text: string; images: string[] }> {
+  const paths = [...text.matchAll(PASTE_NOTE_RE)].map((m) => m[1]);
+  if (!paths.length) return { text, images: [] };
+  const images: string[] = [];
+  for (const p of paths) {
+    try {
+      const buf = await readFile(p);
+      const ext = p.split('.').pop()?.toLowerCase() ?? '';
+      images.push(`data:${MIME_BY_EXT[ext] ?? 'image/png'};base64,${buf.toString('base64')}`);
+    } catch {
+      // temp file gone or unreadable — skip it, don't break the rest of the message
+    }
+  }
+  return { text: text.replace(PASTE_NOTE_RE, '').replace(/^\n+/, ''), images };
+}
+
 function toolDetail(name: string, input: any): string {
   const n = name.toLowerCase();
   const base = (p: unknown) =>
@@ -80,16 +108,20 @@ export async function parseTranscript(file: string, sessionId: string, limit = 8
     const ts = typeof o.timestamp === 'string' ? Date.parse(o.timestamp) : 0;
 
     if (o.type === 'user') {
-      // Background task-completion notifications are injected as "user" events
-      // (origin.kind identifies them) but nothing the actual person typed —
-      // don't render them as if they said it.
+      // System-injected content rides in as "user" events but nothing the
+      // actual person typed — never render it as if they said it. Two
+      // distinct markers seen in the wild: isMeta (skill bodies, other
+      // injected context) and origin.kind (background task notifications).
+      if (o.isMeta === true) continue;
       if (o.origin?.kind === 'task-notification') continue;
       const content = o.message?.content;
       // Tool results arrive as "user" events — don't render them as user turns.
       if (Array.isArray(content) && content.some((c: any) => c?.type === 'tool_result')) continue;
-      const { text, images } = textAndImages(content);
-      if (!text.trim() && !images.length) continue;
-      msgs.push({ id: o.uuid ?? `u${i++}`, role: 'user', text, tools: [], images, ts });
+      const { text: rawText, images: inlineImages } = textAndImages(content);
+      if (!rawText.trim() && !inlineImages.length) continue;
+      const { text, images: pastedImages } = await resolvePastedImages(rawText);
+      if (!text.trim() && !inlineImages.length && !pastedImages.length) continue;
+      msgs.push({ id: o.uuid ?? `u${i++}`, role: 'user', text, tools: [], images: [...inlineImages, ...pastedImages], ts });
     } else if (o.type === 'assistant') {
       const content = o.message?.content;
       const { text, images } = textAndImages(content);
