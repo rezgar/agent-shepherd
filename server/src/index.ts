@@ -129,6 +129,7 @@ async function main() {
           m.sessionId,
           m.cwd,
           m.text,
+          Array.isArray(m.images) ? m.images : undefined,
           () => {
             if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'send-done', sessionId: m.sessionId }));
             void sendWindow(ws); // nudge a transcript refresh in case the file-watch is slow

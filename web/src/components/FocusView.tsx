@@ -35,7 +35,7 @@ export function FocusView({
   onRename: (sessionId: string, name: string) => void;
   fontSize: number;
   onFontSize: (delta: number) => void;
-  onSend: (sessionId: string, cwd: string, text: string) => void;
+  onSend: (sessionId: string, cwd: string, text: string, images?: string[]) => void;
   sending: boolean;
   onHide: (sessionId: string) => void;
 }) {
@@ -118,7 +118,7 @@ export function FocusView({
 
       <Composer
         lastUserMessage={lastUser}
-        onSend={(text) => onSend(focused.sessionId, focused.cwd, text)}
+        onSend={(text, images) => onSend(focused.sessionId, focused.cwd, text, images)}
         sending={sending}
       />
     </div>

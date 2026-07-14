@@ -20,7 +20,7 @@ export interface Shepherd {
   focus: (file: string, sessionId: string) => void;
   unfocus: () => void;
   loadMore: () => void;
-  send: (sessionId: string, cwd: string, text: string) => void;
+  send: (sessionId: string, cwd: string, text: string, images?: string[]) => void;
   /** Sessions with an in-flight reply. */
   sendingIds: Set<string>;
 }
@@ -141,8 +141,8 @@ export function useShepherd(): Shepherd {
     wsRef.current?.send(JSON.stringify({ type: 'loadMore', file: f.file, sessionId: f.sessionId, before: st.offset }));
   }, []);
 
-  const send = useCallback((sessionId: string, cwd: string, text: string) => {
-    wsRef.current?.send(JSON.stringify({ type: 'send', sessionId, cwd, text }));
+  const send = useCallback((sessionId: string, cwd: string, text: string, images?: string[]) => {
+    wsRef.current?.send(JSON.stringify({ type: 'send', sessionId, cwd, text, images }));
     setSendingIds((s) => new Set(s).add(sessionId));
   }, []);
 

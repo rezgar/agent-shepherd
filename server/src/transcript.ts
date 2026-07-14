@@ -80,6 +80,10 @@ export async function parseTranscript(file: string, sessionId: string, limit = 8
     const ts = typeof o.timestamp === 'string' ? Date.parse(o.timestamp) : 0;
 
     if (o.type === 'user') {
+      // Background task-completion notifications are injected as "user" events
+      // (origin.kind identifies them) but nothing the actual person typed —
+      // don't render them as if they said it.
+      if (o.origin?.kind === 'task-notification') continue;
       const content = o.message?.content;
       // Tool results arrive as "user" events — don't render them as user turns.
       if (Array.isArray(content) && content.some((c: any) => c?.type === 'tool_result')) continue;
