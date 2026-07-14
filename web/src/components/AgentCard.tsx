@@ -22,14 +22,7 @@ export function AgentCard({ agent, now }: { agent: AgentModel; now: number }) {
         <span className="card__ago">{ago}</span>
       </div>
 
-      <div className="card__name" title={`${agent.name}\n${agent.label} · ${agent.cwd}`}>
-        {agent.name}
-      </div>
-
-      {needs && (
-        <div className="card__kind">{agent.action === 'approve' ? '⏸ APPROVE' : '❔ QUESTION'}</div>
-      )}
-
+      {/* progress bar above the title */}
       <div className="pips" aria-label={`stage ${agent.stage}`} title={`stage: ${agent.stage}`}>
         {STAGES.map((_, i) => {
           const cls = cur < 0 ? '' : i < cur ? 'g' : i === cur ? (needs ? 'a' : 'g') : '';
@@ -44,6 +37,14 @@ export function AgentCard({ agent, now }: { agent: AgentModel; now: number }) {
         ))}
       </div>
 
+      <div className="card__name" title={`${agent.name}\n${agent.label} · ${agent.cwd}`}>
+        {agent.name}
+      </div>
+
+      {/* action tag sits directly above the question/ask text */}
+      {needs && (
+        <div className="card__kind">{agent.action === 'approve' ? '⏸ APPROVE' : '❔ QUESTION'}</div>
+      )}
       <div className={`card__status${needs ? ' card__status--needs' : ''}`} title={agent.status}>
         {agent.status}
       </div>
