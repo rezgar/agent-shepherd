@@ -18,15 +18,16 @@ export function AgentCard({ agent, now }: { agent: AgentModel; now: number }) {
 
       <div className="card__top">
         <span className="dot" style={{ background: STATE_DOT[agent.state] }} />
-        <span className="card__label" title={agent.title ?? agent.cwd}>
-          {agent.label}
-        </span>
         {agent.queued > 0 && <span className="card__queued">⌸{agent.queued}</span>}
         <span className="card__ago">{ago}</span>
       </div>
 
+      <div className="card__name" title={`${agent.label}  ·  ${agent.cwd}`}>
+        {agent.name}
+      </div>
+
       {needs && (
-        <div className="card__kind">{agent.action === 'approve' ? '⏸ APPROVE' : '❔ ANSWER'}</div>
+        <div className="card__kind">{agent.action === 'approve' ? '⏸ APPROVE' : '❔ QUESTION'}</div>
       )}
 
       <div className="pips" aria-label={`stage ${agent.stage}`}>

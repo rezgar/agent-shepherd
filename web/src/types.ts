@@ -19,6 +19,7 @@ export interface AgentModel {
   branch: string | null;
   label: string;
   title: string | null;
+  name: string;
   state: AgentState;
   stage: Stage;
   status: string;

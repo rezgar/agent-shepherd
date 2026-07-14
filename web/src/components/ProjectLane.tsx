@@ -1,5 +1,4 @@
 import type { AgentModel } from '../types';
-import { productColor } from '../lib/format';
 import { AgentCard } from './AgentCard';
 
 const STATE_RANK: Record<AgentModel['state'], number> = { 'needs-you': 0, working: 1, idle: 2 };
@@ -8,12 +7,13 @@ export function ProjectLane({
   product,
   agents,
   now,
+  color,
 }: {
   product: string;
   agents: AgentModel[];
   now: number;
+  color: string;
 }) {
-  const color = productColor(product);
   const needs = agents.filter((a) => a.state === 'needs-you').length;
   const sorted = [...agents].sort(
     (a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || b.lastActivity - a.lastActivity,

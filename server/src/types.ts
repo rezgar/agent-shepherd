@@ -25,6 +25,8 @@ export interface AgentModel {
   label: string;
   /** Auto-generated session title, if any. */
   title: string | null;
+  /** Best display name: GitHub issue title → session title → branch/worktree. */
+  name: string;
   state: AgentState;
   stage: Stage;
   /** One-line human status. */

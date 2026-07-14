@@ -193,6 +193,7 @@ export async function parseSession(file: string, now: number): Promise<AgentMode
     cwd,
     branch,
     label,
+    name: title ?? label,
     title,
     state,
     stage,
