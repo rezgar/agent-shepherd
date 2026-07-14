@@ -67,6 +67,69 @@ body {
   padding: 3px 6px;
   font-size: 12px;
 }
+.hidden-toggle {
+  font-size: 12px;
+  color: var(--muted);
+  background: #161b22;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.hidden-toggle:hover {
+  color: var(--text);
+  border-color: #3d4b5f;
+}
+.hidden-tray {
+  width: 100%;
+  border-top: 1px dashed var(--line);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+.hidden-tray__title {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.hidden-tray__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hidden-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #161b22;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 4px 10px 4px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.72;
+}
+.hidden-chip:hover {
+  opacity: 1;
+  border-color: #3d4b5f;
+  color: var(--text);
+}
+.hidden-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.hidden-chip__name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hidden-chip__restore {
+  color: var(--muted);
+  font-size: 11px;
+}
 .conn {
   font-size: 11px;
   padding: 2px 9px;
@@ -167,6 +230,30 @@ body {
   align-items: center;
   justify-content: center;
   box-shadow: 0 0 0 2px #0c1119;
+}
+.card__hide {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  line-height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.card:hover .card__hide {
+  opacity: 1;
+}
+.card__hide:hover {
+  background: #f8514933;
+  color: #f85149;
 }
 .card__top {
   display: flex;

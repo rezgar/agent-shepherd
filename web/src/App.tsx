@@ -36,6 +36,8 @@ export function App() {
   const [windowH, setWindowH] = useState(4);
   const [fontSize, setFontSize] = useState<number>(() => load('shepherd:font', 14));
   const [renames, setRenames] = useState<Record<string, string>>(() => load('shepherd:names', {}));
+  const [hidden, setHidden] = useState<Record<string, true>>(() => load('shepherd:hidden', {}));
+  const [showHidden, setShowHidden] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('shepherd:font', JSON.stringify(fontSize));
@@ -43,6 +45,9 @@ export function App() {
   useEffect(() => {
     localStorage.setItem('shepherd:names', JSON.stringify(renames));
   }, [renames]);
+  useEffect(() => {
+    localStorage.setItem('shepherd:hidden', JSON.stringify(hidden));
+  }, [hidden]);
 
   const colorMap = useMemo(() => {
     const names = snap ? [...new Set(snap.agents.map((a) => a.product))].sort() : [];
@@ -60,6 +65,37 @@ export function App() {
       return next;
     });
   const changeFont = (delta: number) => setFontSize((f) => Math.max(12, Math.min(22, f + delta)));
+  const hide = (sessionId: string) =>
+    setHidden((h) => ({ ...h, [sessionId]: true }));
+  const restore = (sessionId: string) =>
+    setHidden((h) => {
+      const next = { ...h };
+      delete next[sessionId];
+      return next;
+    });
+
+  const latest = snap ? snap.agents.reduce((mx, a) => Math.max(mx, a.lastActivity), 0) : 0;
+  const cutoff = latest - windowH * 3_600_000;
+  const allVisible = snap ? snap.agents.filter((a) => a.lastActivity >= cutoff) : [];
+  const shownVisible = allVisible.filter((a) => !hidden[a.sessionId]);
+  const hiddenVisible = allVisible.filter((a) => hidden[a.sessionId]);
+  const groups = groupByProduct(shownVisible);
+  // Same order the cards render in — Alt+N jumps to the Nth card, reading order.
+  const flatOrder = groups.flatMap(([, ags]) => [...ags].sort((a, b) => a.createdAt - b.createdAt));
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey) return;
+      const n = Number(e.key);
+      if (n < 1 || n > 9) return;
+      const target = flatOrder[n - 1];
+      if (!target) return;
+      e.preventDefault();
+      focus(target.file, target.sessionId);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [flatOrder, focus]);
 
   if (!snap) {
     return (
@@ -69,16 +105,12 @@ export function App() {
     );
   }
 
-  const latest = snap.agents.reduce((mx, a) => Math.max(mx, a.lastActivity), 0);
-  const cutoff = latest - windowH * 3_600_000;
-  const visible = snap.agents.filter((a) => a.lastActivity >= cutoff);
-
   const focused = focusedId ? (snap.agents.find((a) => a.sessionId === focusedId) ?? null) : null;
 
   if (focused) {
     return (
       <FocusView
-        agents={visible}
+        agents={shownVisible}
         focused={focused}
         messages={messages}
         hasMore={hasMore}
@@ -93,20 +125,20 @@ export function App() {
         onFontSize={changeFont}
         onSend={send}
         sending={sendingIds.has(focused.sessionId)}
+        onHide={hide}
       />
     );
   }
 
-  const needsYou = visible.filter((a) => a.state === 'needs-you').length;
-  const working = visible.filter((a) => a.state === 'working').length;
-  const groups = groupByProduct(visible);
+  const needsYou = shownVisible.filter((a) => a.state === 'needs-you').length;
+  const working = shownVisible.filter((a) => a.state === 'working').length;
 
   return (
     <div className="shell">
       <header className="topbar">
         <span className="brand">🐑 Agent Shepherd</span>
         <span className="counts">
-          {visible.length} agents · <b className="c-work">{working} working</b>
+          {shownVisible.length} agents · <b className="c-work">{working} working</b>
           {needsYou > 0 && (
             <>
               {' · '}
@@ -124,6 +156,11 @@ export function App() {
             ))}
           </select>
         </label>
+        {hiddenVisible.length > 0 && (
+          <button className="hidden-toggle" onClick={() => setShowHidden((s) => !s)}>
+            {hiddenVisible.length} hidden {showHidden ? '▴' : '▾'}
+          </button>
+        )}
         <span className={`conn ${connected ? 'on' : 'off'}`}>{connected ? 'live' : 'reconnecting…'}</span>
       </header>
 
@@ -137,8 +174,26 @@ export function App() {
             color={colorOf(product)}
             onSelect={(a) => focus(a.file, a.sessionId)}
             nameOf={nameOf}
+            onHide={hide}
           />
         ))}
+
+        {showHidden && hiddenVisible.length > 0 && (
+          <div className="hidden-tray">
+            <div className="hidden-tray__title">Hidden — click to restore</div>
+            <div className="hidden-tray__list">
+              {hiddenVisible.map((a) => (
+                <button key={a.sessionId} className="hidden-chip" onClick={() => restore(a.sessionId)}>
+                  <span className="hidden-chip__dot" style={{ background: colorOf(a.product) }} />
+                  <span className="hidden-chip__name" title={nameOf(a)}>
+                    {nameOf(a)}
+                  </span>
+                  <span className="hidden-chip__restore">↺ restore</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

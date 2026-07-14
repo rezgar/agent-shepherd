@@ -19,6 +19,7 @@ export function CardStrip({
   colorOf,
   onSelect,
   nameOf,
+  onHide,
 }: {
   agents: AgentModel[];
   focusedId: string;
@@ -26,6 +27,7 @@ export function CardStrip({
   colorOf: (product: string) => string;
   onSelect: (a: AgentModel) => void;
   nameOf: (a: AgentModel) => string;
+  onHide: (sessionId: string) => void;
 }) {
   return (
     <div className="strip">
@@ -46,6 +48,7 @@ export function CardStrip({
                   selected={a.sessionId === focusedId}
                   onClick={() => onSelect(a)}
                   displayName={nameOf(a)}
+                  onHide={() => onHide(a.sessionId)}
                 />
               ))}
             </div>

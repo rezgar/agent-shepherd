@@ -14,6 +14,7 @@ export function AgentCard({
   selected,
   onClick,
   displayName,
+  onHide,
 }: {
   agent: AgentModel;
   now: number;
@@ -21,6 +22,7 @@ export function AgentCard({
   selected?: boolean;
   onClick?: () => void;
   displayName?: string;
+  onHide?: () => void;
 }) {
   const needs = agent.state === 'needs-you';
   const working = agent.state === 'working';
@@ -43,6 +45,18 @@ export function AgentCard({
   return (
     <div className={cls} onClick={onClick}>
       {needs && <span className="badge">!</span>}
+      {onHide && (
+        <button
+          className="card__hide"
+          title="Hide session"
+          onClick={(e) => {
+            e.stopPropagation();
+            onHide();
+          }}
+        >
+          ×
+        </button>
+      )}
 
       <div className="card__top">
         {working ? (

@@ -20,6 +20,7 @@ export function FocusView({
   onFontSize,
   onSend,
   sending,
+  onHide,
 }: {
   agents: AgentModel[];
   focused: AgentModel;
@@ -36,6 +37,7 @@ export function FocusView({
   onFontSize: (delta: number) => void;
   onSend: (sessionId: string, cwd: string, text: string) => void;
   sending: boolean;
+  onHide: (sessionId: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -109,6 +111,7 @@ export function FocusView({
         colorOf={colorOf}
         onSelect={onSelect}
         nameOf={nameOf}
+        onHide={onHide}
       />
 
       <ChatTranscript key={focused.sessionId} messages={messages} hasMore={hasMore} onLoadMore={onLoadMore} />

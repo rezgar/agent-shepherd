@@ -8,6 +8,7 @@ export function ProjectLane({
   color,
   onSelect,
   nameOf,
+  onHide,
 }: {
   product: string;
   agents: AgentModel[];
@@ -15,6 +16,7 @@ export function ProjectLane({
   color: string;
   onSelect: (a: AgentModel) => void;
   nameOf: (a: AgentModel) => string;
+  onHide: (sessionId: string) => void;
 }) {
   const needs = agents.filter((a) => a.state === 'needs-you').length;
   // Stable order by session creation, not last activity — so cards stop jumping.
@@ -35,6 +37,7 @@ export function ProjectLane({
             now={now}
             displayName={nameOf(a)}
             onClick={() => onSelect(a)}
+            onHide={() => onHide(a.sessionId)}
           />
         ))}
       </div>
