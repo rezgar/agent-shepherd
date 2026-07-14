@@ -30,7 +30,8 @@ function groupByProduct(agents: AgentModel[]): [string, AgentModel[]][] {
 }
 
 export function App() {
-  const { snap, connected, focusedId, messages, hasMore, focus, unfocus, loadMore } = useShepherd();
+  const { snap, connected, focusedId, messages, hasMore, focus, unfocus, loadMore, send, sendingIds } =
+    useShepherd();
   const now = useTick(1000);
   const [windowH, setWindowH] = useState(4);
   const [fontSize, setFontSize] = useState<number>(() => load('shepherd:font', 14));
@@ -90,6 +91,8 @@ export function App() {
         onRename={rename}
         fontSize={fontSize}
         onFontSize={changeFont}
+        onSend={send}
+        sending={sendingIds.has(focused.sessionId)}
       />
     );
   }

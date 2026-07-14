@@ -583,11 +583,21 @@ body {
 }
 .composer__send {
   background: #21262d;
-  color: #8b949e;
+  color: #e6edf3;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 16px;
   font-weight: 600;
+  cursor: pointer;
+}
+.composer__send--live:not(:disabled) {
+  background: #238636;
+  border-color: #238636;
+  color: #fff;
+}
+.composer__send:disabled {
+  background: #21262d;
+  color: #6e7681;
   cursor: not-allowed;
 }
 

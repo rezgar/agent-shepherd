@@ -2,6 +2,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import chokidar from 'chokidar';
 import { scanAll, PROJECTS_DIR } from './scan.js';
 import { parseTranscript } from './transcript.js';
+import { sendToSession } from './sender.js';
 import type { Snapshot } from './types.js';
 
 const PORT = 4177;
@@ -122,6 +123,20 @@ async function main() {
       } else if (m.type === 'unfocus') {
         ws.focusFile = undefined;
         ws.focusSession = undefined;
+      } else if (m.type === 'send' && m.sessionId && m.cwd && typeof m.text === 'string' && m.text.trim()) {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'send-ack', sessionId: m.sessionId }));
+        sendToSession(
+          m.sessionId,
+          m.cwd,
+          m.text,
+          () => {
+            if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'send-done', sessionId: m.sessionId }));
+            void sendWindow(ws); // nudge a transcript refresh in case the file-watch is slow
+          },
+          (error) => {
+            if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'send-error', sessionId: m.sessionId, error }));
+          },
+        );
       }
     });
   });

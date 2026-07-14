@@ -18,6 +18,8 @@ export function FocusView({
   onRename,
   fontSize,
   onFontSize,
+  onSend,
+  sending,
 }: {
   agents: AgentModel[];
   focused: AgentModel;
@@ -32,6 +34,8 @@ export function FocusView({
   onRename: (sessionId: string, name: string) => void;
   fontSize: number;
   onFontSize: (delta: number) => void;
+  onSend: (sessionId: string, cwd: string, text: string) => void;
+  sending: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -109,7 +113,11 @@ export function FocusView({
 
       <ChatTranscript key={focused.sessionId} messages={messages} hasMore={hasMore} onLoadMore={onLoadMore} />
 
-      <Composer lastUserMessage={lastUser} />
+      <Composer
+        lastUserMessage={lastUser}
+        onSend={(text) => onSend(focused.sessionId, focused.cwd, text)}
+        sending={sending}
+      />
     </div>
   );
 }

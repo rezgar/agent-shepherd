@@ -20,6 +20,9 @@ export interface Shepherd {
   focus: (file: string, sessionId: string) => void;
   unfocus: () => void;
   loadMore: () => void;
+  send: (sessionId: string, cwd: string, text: string) => void;
+  /** Sessions with an in-flight reply. */
+  sendingIds: Set<string>;
 }
 
 function mergeTail(prev: Loaded | null, sessionId: string, tail: ChatMsg[], offset: number, total: number): Loaded {
@@ -48,6 +51,7 @@ export function useShepherd(): Shepherd {
   const [connected, setConnected] = useState(false);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [sendingIds, setSendingIds] = useState<Set<string>>(() => new Set());
 
   const wsRef = useRef<WebSocket | null>(null);
   const focusRef = useRef<{ file: string; sessionId: string } | null>(null);
@@ -91,6 +95,14 @@ export function useShepherd(): Shepherd {
             cache.current.set(d.sessionId, next);
             return next;
           });
+        } else if (d.type === 'send-done' || d.type === 'send-error') {
+          setSendingIds((s) => {
+            if (!s.has(d.sessionId)) return s;
+            const n = new Set(s);
+            n.delete(d.sessionId);
+            return n;
+          });
+          if (d.type === 'send-error') console.warn('[shepherd] send failed:', d.error);
         }
       };
       ws.onclose = () => {
@@ -129,6 +141,11 @@ export function useShepherd(): Shepherd {
     wsRef.current?.send(JSON.stringify({ type: 'loadMore', file: f.file, sessionId: f.sessionId, before: st.offset }));
   }, []);
 
+  const send = useCallback((sessionId: string, cwd: string, text: string) => {
+    wsRef.current?.send(JSON.stringify({ type: 'send', sessionId, cwd, text }));
+    setSendingIds((s) => new Set(s).add(sessionId));
+  }, []);
+
   // Only ever surface the transcript that matches the focused session — a previous
   // session's content must never linger while switching.
   const matches = !!loaded && loaded.sessionId === focusedId;
@@ -141,6 +158,8 @@ export function useShepherd(): Shepherd {
     focus,
     unfocus,
     loadMore,
+    send,
+    sendingIds,
   };
 }
 

@@ -1,9 +1,24 @@
 import { useRef, useState } from 'react';
 
-/** Message input. ↑ in an empty composer recalls the last message for editing. */
-export function Composer({ lastUserMessage }: { lastUserMessage: string | null }) {
+/** Message input. Enter sends, Shift+Enter newlines, ↑ recalls the last message. */
+export function Composer({
+  lastUserMessage,
+  onSend,
+  sending,
+}: {
+  lastUserMessage: string | null;
+  onSend: (text: string) => void;
+  sending: boolean;
+}) {
   const [value, setValue] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
+
+  const submit = () => {
+    const t = value.trim();
+    if (!t || sending) return;
+    onSend(t);
+    setValue('');
+  };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' && value.trim() === '' && lastUserMessage) {
@@ -16,7 +31,11 @@ export function Composer({ lastUserMessage }: { lastUserMessage: string | null }
           el.setSelectionRange(el.value.length, el.value.length);
         }
       });
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submit();
     }
+    // Shift+Enter falls through to the default → newline
   };
 
   return (
@@ -24,14 +43,18 @@ export function Composer({ lastUserMessage }: { lastUserMessage: string | null }
       <textarea
         ref={ref}
         className="composer__input"
-        placeholder="Message this agent…   (↑ to edit your last message · sending lands in Slice 3)"
+        placeholder="Message this agent…   (Enter to send · Shift+Enter for newline · ↑ to edit last)"
         value={value}
         rows={1}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={onKeyDown}
       />
-      <button className="composer__send" disabled title="Replying goes live in Slice 3">
-        Send
+      <button
+        className="composer__send composer__send--live"
+        onClick={submit}
+        disabled={sending || !value.trim()}
+      >
+        {sending ? 'Sending…' : 'Send'}
       </button>
     </div>
   );
