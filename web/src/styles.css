@@ -318,10 +318,55 @@ body {
 .focus__sep {
   color: #6e7681;
 }
-.focus__hint {
+.focus__tools {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.focus__hint {
   color: #6e7681;
   font-size: 12px;
+}
+.fontctl {
+  display: inline-flex;
+  gap: 4px;
+}
+.fontctl button {
+  background: #161b22;
+  color: #e6edf3;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.fontctl button:hover {
+  border-color: #4b5563;
+}
+.focus__edit {
+  background: none;
+  border: none;
+  color: #6e7681;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 2px;
+}
+.focus__edit:hover {
+  color: #e6edf3;
+}
+.focus__rename {
+  background: #0d1117;
+  color: var(--text);
+  border: 1px solid #4b5563;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 13px;
+  min-width: 260px;
+}
+.focus__rename:focus {
+  outline: none;
+  border-color: #58a6ff;
 }
 
 /* ---- strip ---- */
@@ -358,10 +403,14 @@ body {
 .chat {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 22px;
-  max-width: 1000px;
+  padding: 18px 40px;
   width: 100%;
-  margin: 0 auto;
+}
+.chat__more {
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 4px 0 14px;
 }
 .chat--empty {
   color: var(--muted);
@@ -376,6 +425,12 @@ body {
   font-weight: 700;
   letter-spacing: 0.4px;
   margin-bottom: 5px;
+}
+.msg--user {
+  background: #131c2e;
+  border: 1px solid #21324d;
+  border-radius: 10px;
+  padding: 10px 14px 12px;
 }
 .msg--user .msg__role {
   color: #58a6ff;
@@ -534,4 +589,49 @@ body {
   padding: 0 16px;
   font-weight: 600;
   cursor: not-allowed;
+}
+
+/* chat font size is user-adjustable (--chat-font set on .focus) */
+.focus .md {
+  font-size: var(--chat-font, 14px);
+}
+
+/* working indicator — animated bars (a dot is hard to read at a glance) */
+.bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 10px;
+  flex: 0 0 auto;
+}
+.bars i {
+  width: 3px;
+  height: 100%;
+  background: #3fb950;
+  border-radius: 1px;
+  transform-origin: bottom;
+  animation: bars 0.9s ease-in-out infinite;
+}
+.bars i:nth-child(1) {
+  animation-delay: 0s;
+}
+.bars i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.bars i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes bars {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+.card--working {
+  border-color: #24402c;
 }

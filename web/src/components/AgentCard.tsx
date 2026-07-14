@@ -13,20 +13,25 @@ export function AgentCard({
   compact,
   selected,
   onClick,
+  displayName,
 }: {
   agent: AgentModel;
   now: number;
   compact?: boolean;
   selected?: boolean;
   onClick?: () => void;
+  displayName?: string;
 }) {
   const needs = agent.state === 'needs-you';
+  const working = agent.state === 'working';
   const cur = stageIndex(agent.stage);
   const ago = humAgo(now - agent.lastActivity);
+  const name = displayName ?? agent.name;
 
   const cls = [
     'card',
     needs && 'card--needs',
+    working && 'card--working',
     agent.state === 'idle' && 'card--idle',
     compact && 'card--compact',
     selected && 'card--selected',
@@ -40,7 +45,15 @@ export function AgentCard({
       {needs && <span className="badge">!</span>}
 
       <div className="card__top">
-        <span className="dot" style={{ background: STATE_DOT[agent.state] }} />
+        {working ? (
+          <span className="bars" aria-label="working" title="working">
+            <i />
+            <i />
+            <i />
+          </span>
+        ) : (
+          <span className="dot" style={{ background: STATE_DOT[agent.state] }} />
+        )}
         {agent.queued > 0 && <span className="card__queued">⌸{agent.queued}</span>}
         <span className="card__ago">{ago}</span>
       </div>
@@ -62,13 +75,10 @@ export function AgentCard({
         </div>
       )}
 
-      <div className="card__name" title={`${agent.name}\n${agent.label} · ${agent.cwd}`}>
-        {agent.name}
+      <div className="card__name" title={`${name}\n${agent.label} · ${agent.cwd}`}>
+        {name}
       </div>
 
-      {needs && (
-        <div className="card__kind">{agent.action === 'approve' ? '⏸ APPROVE' : '❔ QUESTION'}</div>
-      )}
       <div className={`card__status${needs ? ' card__status--needs' : ''}`} title={agent.status}>
         {agent.status}
       </div>

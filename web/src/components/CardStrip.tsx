@@ -1,8 +1,6 @@
 import type { AgentModel } from '../types';
 import { AgentCard } from './AgentCard';
 
-const STATE_RANK: Record<AgentModel['state'], number> = { 'needs-you': 0, working: 1, idle: 2 };
-
 function groupByProduct(agents: AgentModel[]): [string, AgentModel[]][] {
   const map = new Map<string, AgentModel[]>();
   for (const a of agents) {
@@ -20,19 +18,19 @@ export function CardStrip({
   now,
   colorOf,
   onSelect,
+  nameOf,
 }: {
   agents: AgentModel[];
   focusedId: string;
   now: number;
   colorOf: (product: string) => string;
   onSelect: (a: AgentModel) => void;
+  nameOf: (a: AgentModel) => string;
 }) {
   return (
     <div className="strip">
       {groupByProduct(agents).map(([product, ags]) => {
-        const sorted = [...ags].sort(
-          (a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || b.lastActivity - a.lastActivity,
-        );
+        const sorted = [...ags].sort((a, b) => a.createdAt - b.createdAt);
         return (
           <div className="strip__group" key={product}>
             <div className="strip__tab" style={{ background: colorOf(product), color: '#04121f' }}>
@@ -47,6 +45,7 @@ export function CardStrip({
                   compact
                   selected={a.sessionId === focusedId}
                   onClick={() => onSelect(a)}
+                  displayName={nameOf(a)}
                 />
               ))}
             </div>

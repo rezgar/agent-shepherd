@@ -74,6 +74,7 @@ export async function parseSession(file: string, now: number): Promise<AgentMode
   let title: string | null = null;
   let permissionMode = 'default';
   let lastTs = 0;
+  let firstTs = 0;
   let queued = 0;
 
   let lastAssistantText = '';
@@ -108,7 +109,10 @@ export async function parseSession(file: string, now: number): Promise<AgentMode
     if (o.permissionMode) permissionMode = o.permissionMode;
     if (typeof o.timestamp === 'string') {
       const ts = Date.parse(o.timestamp);
-      if (ts && ts > lastTs) lastTs = ts;
+      if (ts) {
+        if (ts > lastTs) lastTs = ts;
+        if (firstTs === 0 || ts < firstTs) firstTs = ts;
+      }
     }
 
     switch (o.type) {
@@ -197,6 +201,11 @@ export async function parseSession(file: string, now: number): Promise<AgentMode
     state = 'needs-you';
     action = 'question';
     status = gist(lastAssistantText, 200);
+  } else if (wantsTool && autoRuns && idleMs < STALE_MS) {
+    // executing a tool (including a subagent) in an auto-approving mode — the
+    // session is still running even if it hasn't written for a while.
+    state = 'working';
+    status = workingStatus(lastToolName, lastToolInput, lastAssistantText);
   } else if (activelyRunning && lastEventKind !== 'user') {
     state = 'working';
     status = workingStatus(lastToolName, lastToolInput, lastAssistantText);
@@ -222,6 +231,7 @@ export async function parseSession(file: string, now: number): Promise<AgentMode
     status,
     action,
     lastActivity: lastTs,
+    createdAt: firstTs || lastTs,
     queued,
     file,
   };

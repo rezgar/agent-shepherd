@@ -35,6 +35,8 @@ export interface AgentModel {
   action: ActionKind | null;
   /** Epoch ms of last activity. */
   lastActivity: number;
+  /** Epoch ms of the first event — session creation, for stable ordering. */
+  createdAt: number;
   /** Queued (not-yet-sent) instructions. */
   queued: number;
   /** Source transcript path. */

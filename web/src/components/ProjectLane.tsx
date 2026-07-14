@@ -1,25 +1,24 @@
 import type { AgentModel } from '../types';
 import { AgentCard } from './AgentCard';
 
-const STATE_RANK: Record<AgentModel['state'], number> = { 'needs-you': 0, working: 1, idle: 2 };
-
 export function ProjectLane({
   product,
   agents,
   now,
   color,
   onSelect,
+  nameOf,
 }: {
   product: string;
   agents: AgentModel[];
   now: number;
   color: string;
   onSelect: (a: AgentModel) => void;
+  nameOf: (a: AgentModel) => string;
 }) {
   const needs = agents.filter((a) => a.state === 'needs-you').length;
-  const sorted = [...agents].sort(
-    (a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || b.lastActivity - a.lastActivity,
-  );
+  // Stable order by session creation, not last activity — so cards stop jumping.
+  const sorted = [...agents].sort((a, b) => a.createdAt - b.createdAt);
 
   return (
     <div className="lane">
@@ -30,7 +29,13 @@ export function ProjectLane({
       </div>
       <div className="lane__body" style={{ borderColor: color + '55' }}>
         {sorted.map((a) => (
-          <AgentCard key={a.sessionId} agent={a} now={now} onClick={() => onSelect(a)} />
+          <AgentCard
+            key={a.sessionId}
+            agent={a}
+            now={now}
+            displayName={nameOf(a)}
+            onClick={() => onSelect(a)}
+          />
         ))}
       </div>
     </div>
