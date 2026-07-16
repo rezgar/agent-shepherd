@@ -270,6 +270,65 @@ async function getOrSpawnPty(sessionId: string, cwd: string): Promise<Persistent
   }
 }
 
+/** Attach a WS connection to a session's live terminal output — ensures the
+ *  PTY is live (spawning if needed), replays its ring buffer to `ws`
+ *  immediately, then subscribes `ws` to future output. Returns 'error' with
+ *  a message if the PTY couldn't be reached at all. */
+export async function attachTerminal(
+  sessionId: string,
+  cwd: string,
+  ws: FocusWsLike,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let entry: PersistentPty;
+  try {
+    entry = await getOrSpawnPty(sessionId, cwd);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  entry.subscribers.add(ws);
+  entry.lastActivity = Date.now();
+  const replay = entry.buffer.replay();
+  if (replay.length && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'termOutput', sessionId, chunk: replay.toString('utf8') }));
+  }
+  return { ok: true };
+}
+
+/** Stop streaming this session's output to `ws` — the PTY itself is
+ *  untouched, exactly like closing one terminal window onto a tmux session
+ *  that keeps running. */
+export function detachTerminal(sessionId: string, ws: FocusWsLike): void {
+  readyPtys.get(sessionId)?.subscribers.delete(ws);
+}
+
+/** Write text (plus any pasted images, saved to temp files and noted the
+ *  same way today's send path already does) to a session's PTY, serialized
+ *  through its write lock so a second concurrent call can never interleave
+ *  with this one. Defensively clears whatever's on the input line first —
+ *  see the matching comment history on this exact sequence for why it isn't
+ *  always empty (the CLI restores Escape-interrupted text into the input
+ *  line for editing). */
+export async function writeTermInput(
+  sessionId: string,
+  cwd: string,
+  text: string,
+  images: string[] | undefined,
+): Promise<void> {
+  const entry = await getOrSpawnPty(sessionId, cwd);
+  entry.lastActivity = Date.now();
+  const fullText = withImageNotes(text, sessionId, images);
+  await entry.writeLock.run(async () => {
+    entry.pty.write('\x01\x0b');
+    entry.pty.write(`${fullText}\r`);
+  });
+}
+
+/** Resize a session's PTY to match its terminal panel's actual size. */
+export function resizeTerm(sessionId: string, cols: number, rows: number): void {
+  const entry = readyPtys.get(sessionId);
+  entry?.pty.resize(cols, rows);
+}
+
 interface LiveAgentEntry {
   pid?: number;
   sessionId?: string;
