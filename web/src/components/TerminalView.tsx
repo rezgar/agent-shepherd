@@ -97,6 +97,8 @@ export function TerminalView({
   subscribeRef.current = subscribeTerminal;
   const onInputRef = useRef(onInput);
   onInputRef.current = onInput;
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -201,6 +203,10 @@ export function TerminalView({
     term.options.fontSize = fontSize;
     fit.fit();
     onResizeRef.current(term.cols, term.rows);
+    // Clicking the A−/A+ buttons moved focus off the terminal; reclaim it so
+    // typing keeps reaching the pty without a click back in. Skip if a modal
+    // is over the view (don't focus the terminal behind it).
+    if (activeRef.current) term.focus();
   }, [fontSize]);
 
   // Blur when deactivated (a modal opened over the view) so keys don't leak
