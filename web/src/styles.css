@@ -673,6 +673,16 @@ body {
   font-weight: 800;
   padding: 3px 10px;
   border-radius: 7px 7px 0 0;
+  cursor: grab;
+}
+.strip__tab:active {
+  cursor: grabbing;
+}
+.strip__card-wrap {
+  cursor: grab;
+}
+.strip__card-wrap:active {
+  cursor: grabbing;
 }
 .strip__cards {
   display: flex;

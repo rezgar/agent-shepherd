@@ -6,7 +6,7 @@ import { LimitsTracker } from './components/LimitsTracker';
 import { ConnectionBanner } from './components/ConnectionBanner';
 import { NewProjectModal } from './components/NewProjectModal';
 import { groupByProduct } from './lib/format';
-import { stripAgents, stripOrder } from './lib/order';
+import { stripAgents, stripOrder, groupStrip, reorder, type StripState } from './lib/order';
 import { playDone, playError, playNeedsYou, unlockAudio } from './lib/sound';
 import type { AgentModel, AgentState } from './types';
 
@@ -67,6 +67,13 @@ export function App() {
   // active one) in a stable order (re-opening one doesn't move it, same as a
   // browser tab), instead of every active session sorted by creation time.
   const [openedAt, setOpenedAt] = useState<Record<string, number>>(() => load('shepherd:openedAt', {}));
+  // Manual drag order for the focus strip: product-group order, and session
+  // order within each product. Anything not explicitly placed falls back to
+  // first-opened time (see order.ts).
+  const [productOrder, setProductOrder] = useState<string[]>(() => load('shepherd:productOrder', []));
+  const [sessionOrder, setSessionOrder] = useState<Record<string, string[]>>(() =>
+    load('shepherd:sessionOrder', {}),
+  );
 
   useEffect(() => {
     localStorage.setItem('shepherd:font', JSON.stringify(fontSize));
@@ -83,6 +90,12 @@ export function App() {
   useEffect(() => {
     localStorage.setItem('shepherd:openedAt', JSON.stringify(openedAt));
   }, [openedAt]);
+  useEffect(() => {
+    localStorage.setItem('shepherd:productOrder', JSON.stringify(productOrder));
+  }, [productOrder]);
+  useEffect(() => {
+    localStorage.setItem('shepherd:sessionOrder', JSON.stringify(sessionOrder));
+  }, [sessionOrder]);
 
   // Browsers suspend audio until a user gesture — warm it up on the first one.
   useEffect(() => {
@@ -194,10 +207,23 @@ export function App() {
   // authoritative: a hidden session leaves the strip too, so it stops taking a
   // slot and can't be reached by the number-jump.
   const openedAgents = snap ? stripAgents(snap.agents, openedAt, hidden, focusedId) : [];
+  const stripState: StripState = { openedAt, productOrder, sessionOrder };
   // The strip in its rendered order — the list the number-jump walks in focus
   // mode, so "the Nth session" matches what you see there (the canvas uses
-  // flatOrder instead).
-  const openedOrder = stripOrder(openedAgents, openedAt);
+  // flatOrder instead). Follows the manual drag order.
+  const openedOrder = stripOrder(openedAgents, stripState);
+
+  // Drag-and-drop reorder: materialize the current effective order (manual +
+  // open-time fallback), move the dragged item before the target, and persist.
+  const reorderProduct = (dragged: string, target: string) => {
+    const effective = groupStrip(openedAgents, stripState).map(([p]) => p);
+    setProductOrder(reorder(effective, dragged, target));
+  };
+  const reorderSession = (product: string, dragged: string, target: string) => {
+    const group = groupStrip(openedAgents, stripState).find(([p]) => p === product);
+    const ids = group ? group[1].map((a) => a.sessionId) : [];
+    setSessionOrder((prev) => ({ ...prev, [product]: reorder(ids, dragged, target) }));
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -248,7 +274,9 @@ export function App() {
           onHide={closeOpened}
           onSpawn={spawn}
           spawningProducts={spawningProducts}
-          openedAt={openedAt}
+          stripState={stripState}
+          onReorderProduct={reorderProduct}
+          onReorderSession={reorderSession}
           activeSubagents={activeSubagents}
           onSelectSubagent={(s) => openSubagent(focused.file, focused.sessionId, s.agentId, s.description)}
           onCloseSubagent={closeSubagent}
