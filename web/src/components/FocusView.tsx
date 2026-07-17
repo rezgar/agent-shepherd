@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AgentModel, ChatMsg, Limits, SubagentInfo } from '../types';
 import { CardStrip } from './CardStrip';
+import type { StripState } from '../lib/order';
 import { TerminalView } from './TerminalView';
 import { SubagentModal } from './SubagentModal';
 import { LimitsTracker } from './LimitsTracker';
@@ -19,6 +20,9 @@ export function FocusView({
   onHide,
   onSpawn,
   spawningProducts,
+  stripState,
+  onReorderProduct,
+  onReorderSession,
   activeSubagents,
   onSelectSubagent,
   onCloseSubagent,
@@ -30,7 +34,6 @@ export function FocusView({
   onResizeTerm,
   onSendTerminalKey,
   subscribeTerminal,
-  openedAt,
   limits,
 }: {
   agents: AgentModel[];
@@ -46,6 +49,9 @@ export function FocusView({
   onHide: (sessionId: string) => void;
   onSpawn: (product: string) => void;
   spawningProducts: Set<string>;
+  stripState: StripState;
+  onReorderProduct: (dragged: string, target: string) => void;
+  onReorderSession: (product: string, dragged: string, target: string) => void;
   activeSubagents: SubagentInfo[];
   onSelectSubagent: (s: SubagentInfo) => void;
   onCloseSubagent: () => void;
@@ -57,7 +63,6 @@ export function FocusView({
   onResizeTerm: (sessionId: string, cols: number, rows: number) => void;
   onSendTerminalKey: (sessionId: string, cwd: string, key: string) => void;
   subscribeTerminal: (onChunk: (chunk: string) => void) => () => void;
-  openedAt: Record<string, number>;
   limits: Limits | null;
 }) {
   const [editing, setEditing] = useState(false);
@@ -115,7 +120,9 @@ export function FocusView({
         onHide={onHide}
         onSpawn={onSpawn}
         spawningProducts={spawningProducts}
-        openedAt={openedAt}
+        stripState={stripState}
+        onReorderProduct={onReorderProduct}
+        onReorderSession={onReorderSession}
       />
 
       <div className="focus__main">

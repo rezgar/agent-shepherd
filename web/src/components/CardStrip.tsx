@@ -1,11 +1,13 @@
+import { useRef } from 'react';
 import type { AgentModel } from '../types';
 import { AgentCard } from './AgentCard';
-import { groupByProductOrdered } from '../lib/format';
+import { groupStrip, type StripState } from '../lib/order';
 
 /** The persistent product-grouped strip shown across the top of focus mode —
- *  only the sessions you've explicitly opened (see App's openedAt), ordered
- *  by when you first opened each one, not by creation time. Re-opening an
- *  already-listed session doesn't move it — same as a browser tab. */
+ *  only the sessions you've explicitly opened (see App's openedAt). Order
+ *  follows your manual drag order, falling back to first-opened time (see
+ *  order.ts). Drag a project's tab to reorder groups; drag a session card to
+ *  reorder within its group (a session can't move to another project). */
 export function CardStrip({
   agents,
   focusedId,
@@ -16,7 +18,9 @@ export function CardStrip({
   onHide,
   onSpawn,
   spawningProducts,
-  openedAt,
+  stripState,
+  onReorderProduct,
+  onReorderSession,
 }: {
   agents: AgentModel[];
   focusedId: string;
@@ -27,27 +31,83 @@ export function CardStrip({
   onHide: (sessionId: string) => void;
   onSpawn: (product: string) => void;
   spawningProducts: Set<string>;
-  openedAt: Record<string, number>;
+  stripState: StripState;
+  onReorderProduct: (dragged: string, target: string) => void;
+  onReorderSession: (product: string, dragged: string, target: string) => void;
 }) {
+  // Transient drag state — what's being dragged right now. A ref (not state)
+  // because it changes many times per drag and never needs to re-render.
+  const drag = useRef<{ kind: 'product'; product: string } | { kind: 'session'; product: string; id: string } | null>(
+    null,
+  );
+
   return (
     <div className="strip">
-      {groupByProductOrdered(agents, (a) => openedAt[a.sessionId] ?? 0).map(([product, ags]) => (
-        <div className="strip__group" key={product}>
-          <div className="strip__tab" style={{ background: colorOf(product), color: '#04121f' }}>
+      {groupStrip(agents, stripState).map(([product, ags]) => (
+        <div
+          className="strip__group"
+          key={product}
+          onDragOver={(e) => {
+            if (drag.current?.kind === 'product') e.preventDefault();
+          }}
+          onDrop={(e) => {
+            const d = drag.current;
+            if (d?.kind === 'product' && d.product !== product) {
+              e.preventDefault();
+              onReorderProduct(d.product, product);
+            }
+          }}
+        >
+          <div
+            className="strip__tab"
+            style={{ background: colorOf(product), color: '#04121f' }}
+            draggable
+            title={`${product} — drag to reorder projects`}
+            onDragStart={() => {
+              drag.current = { kind: 'product', product };
+            }}
+            onDragEnd={() => {
+              drag.current = null;
+            }}
+          >
             {product}
           </div>
           <div className="strip__cards">
             {ags.map((a) => (
-              <AgentCard
+              <div
                 key={a.sessionId}
-                agent={a}
-                now={now}
-                compact
-                selected={a.sessionId === focusedId}
-                onClick={() => onSelect(a)}
-                displayName={nameOf(a)}
-                onHide={() => onHide(a.sessionId)}
-              />
+                className="strip__card-wrap"
+                draggable
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  drag.current = { kind: 'session', product, id: a.sessionId };
+                }}
+                onDragEnd={() => {
+                  drag.current = null;
+                }}
+                onDragOver={(e) => {
+                  const d = drag.current;
+                  // Only a same-project session drag is a valid drop here.
+                  if (d?.kind === 'session' && d.product === product) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  const d = drag.current;
+                  if (d?.kind === 'session' && d.product === product && d.id !== a.sessionId) {
+                    e.stopPropagation();
+                    onReorderSession(product, d.id, a.sessionId);
+                  }
+                }}
+              >
+                <AgentCard
+                  agent={a}
+                  now={now}
+                  compact
+                  selected={a.sessionId === focusedId}
+                  onClick={() => onSelect(a)}
+                  displayName={nameOf(a)}
+                  onHide={() => onHide(a.sessionId)}
+                />
+              </div>
             ))}
             <button
               className="new-session-card"

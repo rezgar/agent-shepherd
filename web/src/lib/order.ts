@@ -1,5 +1,4 @@
 import type { AgentModel } from '../types';
-import { groupByProductOrdered } from './format';
 
 /**
  * The sessions shown in the focus-mode strip: the ones you've explicitly
@@ -21,14 +20,71 @@ export function stripAgents(
   );
 }
 
+/** Manual drag order + the open-time fallback the strip falls back to for
+ *  anything not manually placed yet. */
+export interface StripState {
+  openedAt: Record<string, number>;
+  /** Manual order of product groups (drag-and-drop). */
+  productOrder: string[];
+  /** Manual order of sessions within each product (drag-and-drop). */
+  sessionOrder: Record<string, string[]>;
+}
+
 /**
- * The strip in its rendered order, flattened — grouped by product, sessions by
- * the time you first opened them. This is the exact list `CardStrip` shows, so
- * the number-jump can walk it and "the Nth session" matches what you see.
+ * Move `dragged` to just before `target` in a copy of `list`. Used for both
+ * product-group and within-group session reordering. If `target` isn't present,
+ * `dragged` goes to the end; a no-op when they're equal.
  */
-export function stripOrder(
-  agents: AgentModel[],
-  openedAt: Record<string, number>,
-): AgentModel[] {
-  return groupByProductOrdered(agents, (a) => openedAt[a.sessionId] ?? 0).flatMap(([, ags]) => ags);
+export function reorder(list: string[], dragged: string, target: string): string[] {
+  if (dragged === target) return list;
+  const without = list.filter((x) => x !== dragged);
+  const idx = without.indexOf(target);
+  if (idx < 0) return [...without, dragged];
+  return [...without.slice(0, idx), dragged, ...without.slice(idx)];
+}
+
+/** Order `present` keys: manual ones first (in manual order, filtered to those
+ *  that exist), then the rest by `fallback` ascending. */
+function orderKeys(present: string[], manual: string[], fallback: (k: string) => number): string[] {
+  const set = new Set(present);
+  const placed = manual.filter((k) => set.has(k));
+  const seen = new Set(placed);
+  const rest = present.filter((k) => !seen.has(k)).sort((a, b) => fallback(a) - fallback(b));
+  return [...placed, ...rest];
+}
+
+/**
+ * The strip grouped by product and ordered, honoring the manual drag order and
+ * falling back to first-opened time for anything not manually placed. This is
+ * the single source of truth for what `CardStrip` renders and what the
+ * number-jump walks, so the two always agree.
+ */
+export function groupStrip(agents: AgentModel[], state: StripState): [string, AgentModel[]][] {
+  const byProduct = new Map<string, AgentModel[]>();
+  for (const a of agents) {
+    const arr = byProduct.get(a.product) ?? [];
+    arr.push(a);
+    byProduct.set(a.product, arr);
+  }
+  const openedOf = (id: string) => state.openedAt[id] ?? 0;
+  // A product sorts (by fallback) by the earliest first-opened session in it.
+  const productFallback = (p: string) =>
+    Math.min(...byProduct.get(p)!.map((a) => openedOf(a.sessionId)));
+
+  const products = orderKeys([...byProduct.keys()], state.productOrder, productFallback);
+  return products.map((p): [string, AgentModel[]] => {
+    const ags = byProduct.get(p)!;
+    const byId = new Map(ags.map((a) => [a.sessionId, a] as const));
+    const ids = orderKeys(ags.map((a) => a.sessionId), state.sessionOrder[p] ?? [], openedOf);
+    return [p, ids.map((id) => byId.get(id)!)];
+  });
+}
+
+/**
+ * The strip in its rendered order, flattened — the exact list `CardStrip`
+ * shows, so the number-jump can walk it and "the Nth session" matches what you
+ * see.
+ */
+export function stripOrder(agents: AgentModel[], state: StripState): AgentModel[] {
+  return groupStrip(agents, state).flatMap(([, ags]) => ags);
 }
