@@ -1,0 +1,13 @@
+{
+  "name": "@shepherd/desktop",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Electron desktop wrapper for Shepherd — a thin shell over the web UI that ensures the shared daemon is running.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^43.1.1"
+  }
+}
