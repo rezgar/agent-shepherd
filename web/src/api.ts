@@ -23,11 +23,12 @@ export interface Shepherd {
   focus: (file: string, sessionId: string) => void;
   unfocus: () => void;
   loadMore: () => void;
-  /** Bumped every time the attached session changes — TerminalView keys off
+  /** Bumped every time the focused session changes — TerminalView keys off
    *  this to force a fresh xterm.js instance rather than reusing one across
-   *  sessions. */
+   *  sessions. Driven by `focus`, not by attach, so the terminal can attach
+   *  itself with its own fit size once mounted (see TerminalView). */
   termResetKey: string;
-  attachTerminal: (sessionId: string, cwd: string) => void;
+  attachTerminal: (sessionId: string, cwd: string, cols: number, rows: number) => void;
   detachTerminal: (sessionId: string) => void;
   sendTermInput: (sessionId: string, cwd: string, text: string, images?: string[]) => void;
   resizeTerm: (sessionId: string, cols: number, rows: number) => void;
@@ -271,6 +272,9 @@ export function useShepherd(): Shepherd {
 
   const focus = useCallback((file: string, sessionId: string) => {
     focusRef.current = { file, sessionId };
+    // Force a fresh TerminalView (and thus a fresh attach at the new size) on
+    // every focus change — see termResetKey's doc comment.
+    setTermResetKey(sessionId);
     setFocusedId(sessionId);
     setLoaded(cache.current.get(sessionId) ?? null); // instant paint from cache, else clears
     setActiveSubagents([]);
@@ -306,10 +310,12 @@ export function useShepherd(): Shepherd {
     wsSend(wsRef.current, { type: 'loadMore', file: f.file, sessionId: f.sessionId, before: st.offset });
   }, []);
 
-  const attachTerminal = useCallback((sessionId: string, cwd: string) => {
+  const attachTerminal = useCallback((sessionId: string, cwd: string, cols: number, rows: number) => {
     setTermError(null);
-    setTermResetKey(sessionId);
-    wsSend(wsRef.current, { type: 'attachTerm', sessionId, cwd });
+    // cols/rows are the terminal's own fit size — the server sizes the PTY and
+    // its screen mirror to match before serializing the attach snapshot, so the
+    // reconstruction can't reflow/garble on arrival.
+    wsSend(wsRef.current, { type: 'attachTerm', sessionId, cwd, cols, rows });
   }, []);
 
   const detachTerminal = useCallback((sessionId: string) => {

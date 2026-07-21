@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
     "chokidar": "^4.0.3",
     "node-pty": "^1.1.0",
