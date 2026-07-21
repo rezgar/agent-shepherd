@@ -228,7 +228,9 @@ async function main() {
         ws.focusSubagentId = undefined;
       } else if (m.type === 'attachTerm' && m.sessionId && m.cwd) {
         ws.termSession = m.sessionId;
-        void attachTerminal(m.sessionId, m.cwd, ws).then((result) => {
+        const cols = typeof m.cols === 'number' ? m.cols : undefined;
+        const rows = typeof m.rows === 'number' ? m.rows : undefined;
+        void attachTerminal(m.sessionId, m.cwd, ws, cols, rows).then((result) => {
           if (!result.ok && ws.readyState === 1) {
             ws.send(JSON.stringify({ type: 'termError', sessionId: m.sessionId, error: result.error }));
           }

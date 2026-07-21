@@ -1,31 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { AsyncLock, RingBuffer, pinSession, unpinSession, unpinAllForConnection, isPinned } from '../src/sender.js';
+import { AsyncLock, pinSession, unpinSession, unpinAllForConnection, isPinned } from '../src/sender.js';
 
 function fakeWs() {
   return { readyState: 1, send: () => {} };
 }
-
-describe('RingBuffer', () => {
-  it('replays everything written so far, in order, under the cap', () => {
-    const buf = new RingBuffer(1024);
-    buf.push(Buffer.from('hello '));
-    buf.push(Buffer.from('world'));
-    expect(buf.replay().toString('utf8')).toBe('hello world');
-  });
-
-  it('drops the oldest bytes once the cap is exceeded, keeping the tail', () => {
-    const buf = new RingBuffer(10);
-    buf.push(Buffer.from('0123456789')); // exactly the cap
-    buf.push(Buffer.from('AB')); // pushes it 2 over
-    expect(buf.replay().toString('utf8')).toBe('23456789AB');
-  });
-
-  it('a single push larger than the cap keeps only its own tail', () => {
-    const buf = new RingBuffer(5);
-    buf.push(Buffer.from('abcdefghij'));
-    expect(buf.replay().toString('utf8')).toBe('fghij');
-  });
-});
 
 describe('AsyncLock', () => {
   it('runs queued work strictly one at a time, in call order, even if an earlier call is still pending', async () => {

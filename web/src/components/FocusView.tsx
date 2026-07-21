@@ -58,7 +58,7 @@ export function FocusView({
   subagentModal: { agentId: string; description: string; messages: ChatMsg[] | null } | null;
   termResetKey: string;
   termError: string | null;
-  onAttachTerminal: (sessionId: string, cwd: string) => void;
+  onAttachTerminal: (sessionId: string, cwd: string, cols: number, rows: number) => void;
   onDetachTerminal: (sessionId: string) => void;
   onResizeTerm: (sessionId: string, cols: number, rows: number) => void;
   onSendTerminalKey: (sessionId: string, cwd: string, key: string) => void;
@@ -70,18 +70,19 @@ export function FocusView({
   const name = nameOf(focused);
   const focusRootRef = useRef<HTMLDivElement>(null);
 
-  // Attach on mount / whenever the focused session changes; detach on
-  // unmount / session switch. The PTY itself keeps running either way (see
-  // sender.ts's idle-eviction) — this only stops/starts streaming to us.
-  // The attach/detach callbacks are captured in a ref so this effect's only
-  // real dependency is which session is focused, not the callbacks' own
+  // Detach on unmount / session switch. Attach is driven by TerminalView
+  // instead (via onAttach below): it must happen only once the terminal has
+  // mounted and measured its own size, so the attach can carry that size and
+  // the server can serialize a width-matched snapshot. The PTY itself keeps
+  // running either way (see sender.ts's idle-eviction) — this only stops/starts
+  // streaming to us. The detach callback is captured in a ref so this effect's
+  // only real dependency is which session is focused, not the callback's own
   // (recreated-every-render) identity.
-  const attachRef = useRef({ onAttachTerminal, onDetachTerminal });
-  attachRef.current = { onAttachTerminal, onDetachTerminal };
+  const detachRef = useRef(onDetachTerminal);
+  detachRef.current = onDetachTerminal;
   useEffect(() => {
-    attachRef.current.onAttachTerminal(focused.sessionId, focused.cwd);
-    return () => attachRef.current.onDetachTerminal(focused.sessionId);
-  }, [focused.sessionId, focused.cwd]);
+    return () => detachRef.current(focused.sessionId);
+  }, [focused.sessionId]);
 
   // The terminal now owns keyboard input natively (see TerminalView) and
   // focuses itself, so there's no composer focus to reclaim. Esc goes straight
@@ -171,6 +172,7 @@ export function FocusView({
           resetKey={termResetKey}
           subscribeTerminal={subscribeTerminal}
           fontSize={fontSize}
+          onAttach={(cols, rows) => onAttachTerminal(focused.sessionId, focused.cwd, cols, rows)}
           onResize={(cols, rows) => onResizeTerm(focused.sessionId, cols, rows)}
           onInput={(data) => onSendTerminalKey(focused.sessionId, focused.cwd, data)}
           active={!subagentModal}

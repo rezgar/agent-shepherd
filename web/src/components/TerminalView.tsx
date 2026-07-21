@@ -53,24 +53,23 @@ import '@xterm/xterm/css/xterm.css';
  *  since xterm manages selection as its own internal model that the
  *  browser's `window.getSelection()` never sees.
  *
- *  A fresh attach's replayed scrollback (see attachTerminal's ring-buffer
- *  replay) can render corrupted — words fused together, lines misaligned —
- *  because it's raw bytes the CLI wrapped for whatever terminal width the
- *  PTY happened to be at when they were originally written, being fed into
- *  an xterm.js instance that's reflowing them at THIS client's own fit()
- *  width instead. The size sent on mount doesn't reliably fix this even
- *  when it's a genuine change, because it races the replay itself — sent
- *  from the same effect, it can reach the server before or after the
- *  replay it needs to invalidate. Confirmed the hard way that only a
- *  resize sent well AFTER content has landed (e.g. manually clicking
- *  A-/A+) reliably forces the CLI to do a full fresh repaint that
- *  overwrites the corruption. `onFirstChunk` below reproduces that by
- *  construction — tied to "the first chunk (replay or live) has actually
- *  been written", not a guessed timeout. */
+ *  Attach carries this terminal's own fit size (`onAttach`, once, after the
+ *  initial `fit()`), and the server serializes its screen mirror at exactly
+ *  that size. So the reconstruction the client receives is already the right
+ *  width and reflows nothing on arrival. This replaces an earlier design that
+ *  replayed raw PTY bytes captured at whatever width the PTY happened to be at:
+ *  fed into an xterm reflowing them at a different width, they rendered
+ *  corrupted — words fused, lines misaligned (#31/#45) — and the only reliable
+ *  fix was a racy ±1-column resize "nudge" to force a full CLI repaint. With a
+ *  width-matched snapshot there is nothing to reflow, so the nudge is gone.
+ *  `onFirstChunk` now only pins the viewport to the bottom when the snapshot
+ *  lands, so the CLI's bottom-anchored input box is visible rather than
+ *  scrolled off below the fold. */
 export function TerminalView({
   resetKey,
   subscribeTerminal,
   fontSize,
+  onAttach,
   onResize,
   onInput,
   active,
@@ -78,6 +77,10 @@ export function TerminalView({
   resetKey: string;
   subscribeTerminal: (onChunk: (chunk: string) => void) => () => void;
   fontSize: number;
+  /** Called once on mount, after the initial fit, with the terminal's own grid
+   *  size. The parent attaches the session at exactly this size so the server's
+   *  snapshot is width-matched and can't reflow/garble on arrival. */
+  onAttach: (cols: number, rows: number) => void;
   onResize: (cols: number, rows: number) => void;
   /** Raw terminal input from xterm (keystrokes, paste, control sequences),
    *  forwarded straight to the session's pty — the native-input path. */
@@ -91,6 +94,8 @@ export function TerminalView({
   const fitRef = useRef<FitAddon | null>(null);
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
+  const onAttachRef = useRef(onAttach);
+  onAttachRef.current = onAttach;
   const fontSizeRef = useRef(fontSize);
   fontSizeRef.current = fontSize;
   const subscribeRef = useRef(subscribeTerminal);
@@ -118,7 +123,6 @@ export function TerminalView({
     term.loadAddon(fit);
     term.open(container);
     fit.fit();
-    onResizeRef.current(term.cols, term.rows);
     termRef.current = term;
     fitRef.current = fit;
 
@@ -171,54 +175,43 @@ export function TerminalView({
     term.onData((data) => onInputRef.current(data));
     term.focus();
 
-    // Force the CLI to do a full fresh repaint at the current grid size by
-    // nudging the width one column and back. A same-size resize is a no-op
-    // that triggers no repaint, so the one-column change guarantees a real
-    // change is observed even if term.cols already matches the PTY's current
-    // size. The two sends are spaced apart, not fired back to back — confirmed
-    // the hard way that an instant pair can coalesce into a single net-zero
-    // resize (only the final size ever reaches the pty), which never triggers a
-    // repaint and left a session's terminal completely blank. Guarded against a
-    // degenerate cols/rows (container not laid out yet). Used both after the
-    // first chunk lands (fixes replayed-scrollback garble, #31) and after a
-    // resize settles (fixes mid-session garble when the layout shifts, #45).
-    let nudgeTimer: ReturnType<typeof setTimeout> | undefined;
-    const nudgeRepaint = () => {
-      const { cols, rows } = term;
-      if (cols < 2 || rows < 1) return;
-      onResizeRef.current(cols - 1, rows);
-      clearTimeout(nudgeTimer);
-      nudgeTimer = setTimeout(() => onResizeRef.current(cols, rows), 150);
-    };
-
+    // Subscribe FIRST, then attach — so no output the attach triggers can slip
+    // in before we're listening. On the first chunk (the server's width-matched
+    // snapshot), pin the viewport to the bottom so the CLI's bottom-anchored
+    // input box is on-screen, not scrolled off below the fold.
     let onFirstChunk: (() => void) | null = () => {
       onFirstChunk = null;
-      nudgeRepaint();
+      term.scrollToBottom();
     };
     const unsubscribe = subscribeRef.current((chunk) => {
       term.write(chunk);
       onFirstChunk?.();
     });
 
+    // Attach at exactly this terminal's fit size. The server sizes the PTY and
+    // its screen mirror to match, then serializes the snapshot — so what comes
+    // back reflows nothing and can't garble (this replaces the old raw-byte
+    // replay + ±1-column repaint nudge that fought #31/#45).
+    onAttachRef.current(term.cols, term.rows);
+
     // Coalesce rapid container-size changes (layout thrash — the usage bar
-    // ticking, the strip re-rendering, a window drag) into a single fit + clean
-    // repaint once they settle. Un-debounced (the previous behavior), every
-    // intermediate size was pushed straight to the pty, so in-flight output
-    // wrapped at a width the display kept disagreeing with until a manual font
-    // change forced a repaint (#45). The trailing nudge guarantees the CLI
-    // repaints cleanly at the settled size rather than leaving reflowed garble.
+    // ticking, the strip re-rendering, a window drag) into a single fit once
+    // they settle, then tell the server the new size. The PTY + mirror resize
+    // and the CLI repaints at the new size; the client is already fit to it, so
+    // there's nothing to reflow. Pin to the bottom afterwards so the input line
+    // stays visible across the resize.
     let settleTimer: ReturnType<typeof setTimeout> | undefined;
     const ro = new ResizeObserver(() => {
       clearTimeout(settleTimer);
       settleTimer = setTimeout(() => {
         fit.fit();
-        nudgeRepaint();
+        onResizeRef.current(term.cols, term.rows);
+        term.scrollToBottom();
       }, 120);
     });
     ro.observe(container);
 
     return () => {
-      clearTimeout(nudgeTimer);
       clearTimeout(settleTimer);
       unsubscribe();
       ro.disconnect();
@@ -235,6 +228,7 @@ export function TerminalView({
     term.options.fontSize = fontSize;
     fit.fit();
     onResizeRef.current(term.cols, term.rows);
+    term.scrollToBottom();
     // Clicking the A−/A+ buttons moved focus off the terminal; reclaim it so
     // typing keeps reaching the pty without a click back in. Skip if a modal
     // is over the view (don't focus the terminal behind it).
